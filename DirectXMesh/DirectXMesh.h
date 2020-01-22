@@ -18,45 +18,44 @@
 
 #include <stdint.h>
 
-#if !defined(__d3d11_h__) && !defined(__d3d11_x_h__) && !defined(__d3d12_h__) && !defined(__d3d12_x_h__)
+#if !defined(__d3d11_h__) && !defined(__d3d11_x_h__) && !defined(__d3d12_h__) && !defined(__d3d12_x_h__) && !defined(__XBOX_D3D12_X__)
 #if defined(_XBOX_ONE) && defined(_TITLE)
 #include <d3d11_x.h>
-#define DCOMMON_H_INCLUDED
 #else
 #include <d3d11_1.h>
 #endif
 #endif
 
-#include <directxmath.h>
+#include <DirectXMath.h>
 
-#define DIRECTX_MESH_VERSION 120
+#define DIRECTX_MESH_VERSION 140
 
 
 namespace DirectX
 {
     //---------------------------------------------------------------------------------
     // DXGI Format Utilities
-    bool __cdecl IsValidVB(_In_ DXGI_FORMAT fmt);
-    bool __cdecl IsValidIB(_In_ DXGI_FORMAT fmt);
-    size_t __cdecl BytesPerElement(_In_ DXGI_FORMAT fmt);
+    bool __cdecl IsValidVB(_In_ DXGI_FORMAT fmt) noexcept;
+    bool __cdecl IsValidIB(_In_ DXGI_FORMAT fmt) noexcept;
+    size_t __cdecl BytesPerElement(_In_ DXGI_FORMAT fmt) noexcept;
 
 
     //---------------------------------------------------------------------------------
     // Input Layout Descriptor Utilities
 #if defined(__d3d11_h__) || defined(__d3d11_x_h__)
-    bool __cdecl IsValid(_In_reads_(nDecl) const D3D11_INPUT_ELEMENT_DESC* vbDecl, _In_ size_t nDecl);
+    bool __cdecl IsValid(_In_reads_(nDecl) const D3D11_INPUT_ELEMENT_DESC* vbDecl, _In_ size_t nDecl) noexcept;
     void __cdecl ComputeInputLayout(
         _In_reads_(nDecl) const D3D11_INPUT_ELEMENT_DESC* vbDecl, _In_ size_t nDecl,
         _Out_writes_opt_(nDecl) uint32_t* offsets,
-        _Out_writes_opt_(D3D11_IA_VERTEX_INPUT_RESOURCE_SLOT_COUNT) uint32_t* strides);
+        _Out_writes_opt_(D3D11_IA_VERTEX_INPUT_RESOURCE_SLOT_COUNT) uint32_t* strides) noexcept;
 #endif
 
-#if defined(__d3d12_h__) || defined(__d3d12_x_h__)
-    bool __cdecl IsValid(const D3D12_INPUT_LAYOUT_DESC& vbDecl);
+#if defined(__d3d12_h__) || defined(__d3d12_x_h__) || defined(__XBOX_D3D12_X__)
+    bool __cdecl IsValid(const D3D12_INPUT_LAYOUT_DESC& vbDecl) noexcept;
     void __cdecl ComputeInputLayout(
         const D3D12_INPUT_LAYOUT_DESC& vbDecl,
         _Out_writes_opt_(vbDecl.NumElements) uint32_t* offsets,
-        _Out_writes_opt_(D3D12_IA_VERTEX_INPUT_RESOURCE_SLOT_COUNT) uint32_t* strides);
+        _Out_writes_opt_(D3D12_IA_VERTEX_INPUT_RESOURCE_SLOT_COUNT) uint32_t* strides) noexcept;
 #endif
 
     //---------------------------------------------------------------------------------
@@ -80,7 +79,7 @@ namespace DirectX
     class VBReader
     {
     public:
-        VBReader() noexcept;
+        VBReader() noexcept(false);
         VBReader(VBReader&& moveFrom) noexcept;
         VBReader& operator= (VBReader&& moveFrom) noexcept;
 
@@ -94,12 +93,12 @@ namespace DirectX
             // Does not support VB decls with D3D11_INPUT_PER_INSTANCE_DATA
     #endif
 
-    #if defined(__d3d12_h__) || defined(__d3d12_x_h__)
+    #if defined(__d3d12_h__) || defined(__d3d12_x_h__) || defined(__XBOX_D3D12_X__)
         HRESULT __cdecl Initialize(const D3D12_INPUT_LAYOUT_DESC& vbDecl);
             // Does not support VB decls with D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA
     #endif
 
-        HRESULT __cdecl AddStream(_In_reads_bytes_(stride*nVerts) const void* vb, _In_ size_t nVerts, _In_ size_t inputSlot, _In_ size_t stride = 0);
+        HRESULT __cdecl AddStream(_In_reads_bytes_(stride*nVerts) const void* vb, _In_ size_t nVerts, _In_ size_t inputSlot, _In_ size_t stride = 0) noexcept;
             // Add vertex buffer to reader
 
         HRESULT __cdecl Read(_Out_writes_(count) XMVECTOR* buffer, _In_z_ const char* semanticName, _In_ unsigned int semanticIndex, _In_ size_t count, bool x2bias = false) const;
@@ -111,7 +110,7 @@ namespace DirectX
         HRESULT __cdecl Read(_Out_writes_(count) XMFLOAT4* buffer, _In_z_ const char* semanticName, _In_ unsigned int semanticIndex, _In_ size_t count, bool x2bias = false) const;
             // Helpers for data extraction
 
-        void __cdecl Release();
+        void __cdecl Release() noexcept;
 
     #if defined(__d3d11_h__) || defined(__d3d11_x_h__)
         const D3D11_INPUT_ELEMENT_DESC* GetElement(_In_z_ const char* semanticName, _In_ unsigned int semanticIndex) const
@@ -122,7 +121,7 @@ namespace DirectX
         const D3D11_INPUT_ELEMENT_DESC* __cdecl GetElement11(_In_z_ const char* semanticName, _In_ unsigned int semanticIndex) const;
     #endif
 
-    #if defined(__d3d12_h__) || defined(__d3d12_x_h__)
+    #if defined(__d3d12_h__) || defined(__d3d12_x_h__) || defined(__XBOX_D3D12_X__)
         const D3D12_INPUT_ELEMENT_DESC* __cdecl GetElement12(_In_z_ const char* semanticName, _In_ unsigned int semanticIndex) const;
     #endif
 
@@ -136,7 +135,7 @@ namespace DirectX
     class VBWriter
     {
     public:
-        VBWriter() noexcept;
+        VBWriter() noexcept(false);
         VBWriter(VBWriter&& moveFrom) noexcept;
         VBWriter& operator= (VBWriter&& moveFrom) noexcept;
 
@@ -150,12 +149,12 @@ namespace DirectX
             // Does not support VB decls with D3D11_INPUT_PER_INSTANCE_DATA
     #endif
 
-    #if defined(__d3d12_h__) || defined(__d3d12_x_h__)
+    #if defined(__d3d12_h__) || defined(__d3d12_x_h__) || defined(__XBOX_D3D12_X__)
         HRESULT __cdecl Initialize(const D3D12_INPUT_LAYOUT_DESC& vbDecl);
             // Does not support VB decls with D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA
     #endif
 
-        HRESULT __cdecl AddStream(_Out_writes_bytes_(stride*nVerts) void* vb, _In_ size_t nVerts, _In_ size_t inputSlot, _In_ size_t stride = 0);
+        HRESULT __cdecl AddStream(_Out_writes_bytes_(stride*nVerts) void* vb, _In_ size_t nVerts, _In_ size_t inputSlot, _In_ size_t stride = 0) noexcept;
             // Add vertex buffer to writer
 
         HRESULT __cdecl Write(_In_reads_(count) const XMVECTOR* buffer, _In_z_ const char* semanticName, _In_ unsigned int semanticIndex, _In_ size_t count, bool x2bias = false) const;
@@ -167,7 +166,7 @@ namespace DirectX
         HRESULT __cdecl Write(_In_reads_(count) const XMFLOAT4* buffer, _In_z_ const char* semanticName, _In_ unsigned int semanticIndex, _In_ size_t count, bool x2bias = false) const;
             // Helpers for data insertion
 
-        void __cdecl Release();
+        void __cdecl Release() noexcept;
 
     #if defined(__d3d11_h__) || defined(__d3d11_x_h__)
         const D3D11_INPUT_ELEMENT_DESC* __cdecl GetElement(_In_z_ const char* semanticName, _In_ unsigned int semanticIndex) const
@@ -178,7 +177,7 @@ namespace DirectX
         const D3D11_INPUT_ELEMENT_DESC* __cdecl GetElement11(_In_z_ const char* semanticName, _In_ unsigned int semanticIndex) const;
     #endif
 
-    #if defined(__d3d12_h__) || defined(__d3d12_x_h__)
+    #if defined(__d3d12_h__) || defined(__d3d12_x_h__) || defined(__XBOX_D3D12_X__)
         const D3D12_INPUT_ELEMENT_DESC* __cdecl GetElement12(_In_z_ const char* semanticName, _In_ unsigned int semanticIndex) const;
     #endif
 
@@ -222,18 +221,18 @@ namespace DirectX
         _In_reads_(nFaces * 3) const uint16_t* indices, _In_ size_t nFaces,
         _In_reads_(nVerts) const uint32_t* pointRep,
         _In_reads_(nFaces * 3) const uint32_t* adjacency, _In_ size_t nVerts,
-        _Out_writes_(nFaces * 6) uint16_t* indicesAdj);
+        _Out_writes_(nFaces * 6) uint16_t* indicesAdj) noexcept;
     HRESULT __cdecl GenerateGSAdjacency(
         _In_reads_(nFaces * 3) const uint32_t* indices, _In_ size_t nFaces,
         _In_reads_(nVerts) const uint32_t* pointRep,
         _In_reads_(nFaces * 3) const uint32_t* adjacency, _In_ size_t nVerts,
-        _Out_writes_(nFaces * 6) uint32_t* indicesAdj);
+        _Out_writes_(nFaces * 6) uint32_t* indicesAdj) noexcept;
         // Generates an IB suitable for Geometry Shader using D3D1x_PRIMITIVE_TOPOLOGY_TRIANGLELIST_ADJ
 
     //---------------------------------------------------------------------------------
     // Normals, Tangents, and Bi-Tangents Computation
 
-    enum CNORM_FLAGS
+    enum CNORM_FLAGS : uint32_t
     {
         CNORM_DEFAULT                   = 0x0,
             // Default is to compute normals using weight-by-angle
@@ -252,12 +251,12 @@ namespace DirectX
         _In_reads_(nFaces * 3) const uint16_t* indices, _In_ size_t nFaces,
         _In_reads_(nVerts) const XMFLOAT3* positions, _In_ size_t nVerts,
         _In_ DWORD flags,
-        _Out_writes_(nVerts) XMFLOAT3* normals);
+        _Out_writes_(nVerts) XMFLOAT3* normals) noexcept;
     HRESULT __cdecl ComputeNormals(
         _In_reads_(nFaces * 3) const uint32_t* indices, _In_ size_t nFaces,
         _In_reads_(nVerts) const XMFLOAT3* positions, _In_ size_t nVerts,
         _In_ DWORD flags,
-        _Out_writes_(nVerts) XMFLOAT3* normals);
+        _Out_writes_(nVerts) XMFLOAT3* normals) noexcept;
         // Computes vertex normals
 
     HRESULT __cdecl ComputeTangentFrame(
@@ -266,46 +265,46 @@ namespace DirectX
         _In_reads_(nVerts) const XMFLOAT3* normals,
         _In_reads_(nVerts) const XMFLOAT2* texcoords, _In_ size_t nVerts,
         _Out_writes_opt_(nVerts) XMFLOAT3* tangents,
-        _Out_writes_opt_(nVerts) XMFLOAT3* bitangents);
+        _Out_writes_opt_(nVerts) XMFLOAT3* bitangents) noexcept;
     HRESULT __cdecl ComputeTangentFrame(
         _In_reads_(nFaces * 3) const uint32_t* indices, _In_ size_t nFaces,
         _In_reads_(nVerts) const XMFLOAT3* positions,
         _In_reads_(nVerts) const XMFLOAT3* normals,
         _In_reads_(nVerts) const XMFLOAT2* texcoords, _In_ size_t nVerts,
         _Out_writes_opt_(nVerts) XMFLOAT3* tangents,
-        _Out_writes_opt_(nVerts) XMFLOAT3* bitangents);
+        _Out_writes_opt_(nVerts) XMFLOAT3* bitangents) noexcept;
     HRESULT __cdecl ComputeTangentFrame(
         _In_reads_(nFaces * 3) const uint16_t* indices, _In_ size_t nFaces,
         _In_reads_(nVerts) const XMFLOAT3* positions,
         _In_reads_(nVerts) const XMFLOAT3* normals,
         _In_reads_(nVerts) const XMFLOAT2* texcoords, _In_ size_t nVerts,
         _Out_writes_opt_(nVerts) XMFLOAT4* tangents,
-        _Out_writes_opt_(nVerts) XMFLOAT3* bitangents);
+        _Out_writes_opt_(nVerts) XMFLOAT3* bitangents) noexcept;
     HRESULT __cdecl ComputeTangentFrame(
         _In_reads_(nFaces * 3) const uint32_t* indices, _In_ size_t nFaces,
         _In_reads_(nVerts) const XMFLOAT3* positions,
         _In_reads_(nVerts) const XMFLOAT3* normals,
         _In_reads_(nVerts) const XMFLOAT2* texcoords, _In_ size_t nVerts,
         _Out_writes_opt_(nVerts) XMFLOAT4* tangents,
-        _Out_writes_opt_(nVerts) XMFLOAT3* bitangents);
+        _Out_writes_opt_(nVerts) XMFLOAT3* bitangents) noexcept;
     HRESULT __cdecl ComputeTangentFrame(
         _In_reads_(nFaces * 3) const uint16_t* indices, _In_ size_t nFaces,
         _In_reads_(nVerts) const XMFLOAT3* positions,
         _In_reads_(nVerts) const XMFLOAT3* normals,
         _In_reads_(nVerts) const XMFLOAT2* texcoords, _In_ size_t nVerts,
-        _Out_writes_(nVerts) XMFLOAT4* tangents);
+        _Out_writes_(nVerts) XMFLOAT4* tangents) noexcept;
     HRESULT __cdecl ComputeTangentFrame(
         _In_reads_(nFaces * 3) const uint32_t* indices, _In_ size_t nFaces,
         _In_reads_(nVerts) const XMFLOAT3* positions,
         _In_reads_(nVerts) const XMFLOAT3* normals,
         _In_reads_(nVerts) const XMFLOAT2* texcoords, _In_ size_t nVerts,
-        _Out_writes_(nVerts) XMFLOAT4* tangents);
+        _Out_writes_(nVerts) XMFLOAT4* tangents) noexcept;
         // Computes tangents and/or bi-tangents (optionally with handedness stored in .w)
 
     //---------------------------------------------------------------------------------
     // Mesh clean-up and validation
 
-    enum VALIDATE_FLAGS
+    enum VALIDATE_FLAGS : uint32_t
     {
         VALIDATE_DEFAULT                = 0x0,
 
@@ -370,7 +369,7 @@ namespace DirectX
         _Out_writes_(nFaces) uint32_t* faceRemap);
         // Reorders faces by attribute id
 
-    enum OPTFACES
+    enum OPTFACES : uint32_t
     {
         OPTFACES_V_DEFAULT      = 12,
         OPTFACES_R_DEFAULT      = 7,
@@ -433,10 +432,10 @@ namespace DirectX
 
     HRESULT __cdecl OptimizeVertices(
         _In_reads_(nFaces * 3) const uint16_t* indices, _In_ size_t nFaces, _In_ size_t nVerts,
-        _Out_writes_(nVerts) uint32_t* vertexRemap, _Out_opt_ size_t* trailingUnused = nullptr);
+        _Out_writes_(nVerts) uint32_t* vertexRemap, _Out_opt_ size_t* trailingUnused = nullptr) noexcept;
     HRESULT __cdecl OptimizeVertices(
         _In_reads_(nFaces * 3) const uint32_t* indices, _In_ size_t nFaces, _In_ size_t nVerts,
-        _Out_writes_(nVerts) uint32_t* vertexRemap, _Out_opt_ size_t* trailingUnused = nullptr);
+        _Out_writes_(nVerts) uint32_t* vertexRemap, _Out_opt_ size_t* trailingUnused = nullptr) noexcept;
         // Reorders vertices in order of use
 
     //---------------------------------------------------------------------------------
@@ -445,59 +444,59 @@ namespace DirectX
     HRESULT __cdecl ReorderIB(
         _In_reads_(nFaces * 3) const uint16_t* ibin, _In_ size_t nFaces,
         _In_reads_(nFaces) const uint32_t* faceRemap,
-        _Out_writes_(nFaces * 3) uint16_t* ibout);
+        _Out_writes_(nFaces * 3) uint16_t* ibout) noexcept;
     HRESULT __cdecl ReorderIB(
         _Inout_updates_all_(nFaces * 3) uint16_t* ib, _In_ size_t nFaces,
-        _In_reads_(nFaces) const uint32_t* faceRemap);
+        _In_reads_(nFaces) const uint32_t* faceRemap) noexcept;
     HRESULT __cdecl ReorderIB(
         _In_reads_(nFaces * 3) const uint32_t* ibin, _In_ size_t nFaces,
         _In_reads_(nFaces) const uint32_t* faceRemap,
-        _Out_writes_(nFaces * 3) uint32_t* ibout);
+        _Out_writes_(nFaces * 3) uint32_t* ibout) noexcept;
     HRESULT __cdecl ReorderIB(
         _Inout_updates_all_(nFaces * 3) uint32_t* ib, _In_ size_t nFaces,
-        _In_reads_(nFaces) const uint32_t* faceRemap);
+        _In_reads_(nFaces) const uint32_t* faceRemap) noexcept;
         // Applies a face remap reordering to an index buffer
 
     HRESULT __cdecl ReorderIBAndAdjacency(
         _In_reads_(nFaces * 3) const uint16_t* ibin, _In_ size_t nFaces, _In_reads_(nFaces * 3) const uint32_t* adjin,
         _In_reads_(nFaces) const uint32_t* faceRemap,
-        _Out_writes_(nFaces * 3) uint16_t* ibout, _Out_writes_(nFaces * 3) uint32_t* adjout);
+        _Out_writes_(nFaces * 3) uint16_t* ibout, _Out_writes_(nFaces * 3) uint32_t* adjout) noexcept;
     HRESULT __cdecl ReorderIBAndAdjacency(
         _Inout_updates_all_(nFaces * 3) uint16_t* ib, _In_ size_t nFaces, _Inout_updates_all_(nFaces * 3) uint32_t* adj,
-        _In_reads_(nFaces) const uint32_t* faceRemap);
+        _In_reads_(nFaces) const uint32_t* faceRemap) noexcept;
     HRESULT __cdecl ReorderIBAndAdjacency(
         _In_reads_(nFaces * 3) const uint32_t* ibin, _In_ size_t nFaces, _In_reads_(nFaces * 3) const uint32_t* adjin,
         _In_reads_(nFaces) const uint32_t* faceRemap,
-        _Out_writes_(nFaces * 3) uint32_t* ibout, _Out_writes_(nFaces * 3) uint32_t* adjout);
+        _Out_writes_(nFaces * 3) uint32_t* ibout, _Out_writes_(nFaces * 3) uint32_t* adjout) noexcept;
     HRESULT __cdecl ReorderIBAndAdjacency(
         _Inout_updates_all_(nFaces * 3) uint32_t* ib, _In_ size_t nFaces, _Inout_updates_all_(nFaces * 3) uint32_t* adj,
-        _In_reads_(nFaces) const uint32_t* faceRemap);
+        _In_reads_(nFaces) const uint32_t* faceRemap) noexcept;
         // Applies a face remap reordering to an index buffer and adjacency
 
     HRESULT __cdecl FinalizeIB(
         _In_reads_(nFaces * 3) const uint16_t* ibin, _In_ size_t nFaces,
         _In_reads_(nVerts) const uint32_t* vertexRemap, _In_ size_t nVerts,
-        _Out_writes_(nFaces * 3) uint16_t* ibout);
+        _Out_writes_(nFaces * 3) uint16_t* ibout) noexcept;
     HRESULT __cdecl FinalizeIB(
         _Inout_updates_all_(nFaces * 3) uint16_t* ib, _In_ size_t nFaces,
-        _In_reads_(nVerts) const uint32_t* vertexRemap, _In_ size_t nVerts);
+        _In_reads_(nVerts) const uint32_t* vertexRemap, _In_ size_t nVerts) noexcept;
     HRESULT __cdecl FinalizeIB(
         _In_reads_(nFaces * 3) const uint32_t* ibin, _In_ size_t nFaces,
         _In_reads_(nVerts) const uint32_t* vertexRemap, _In_ size_t nVerts,
-        _Out_writes_(nFaces * 3) uint32_t* ibout);
+        _Out_writes_(nFaces * 3) uint32_t* ibout) noexcept;
     HRESULT __cdecl FinalizeIB(
         _Inout_updates_all_(nFaces * 3) uint32_t* ib, _In_ size_t nFaces,
-        _In_reads_(nVerts) const uint32_t* vertexRemap, _In_ size_t nVerts);
+        _In_reads_(nVerts) const uint32_t* vertexRemap, _In_ size_t nVerts) noexcept;
         // Applies a vertex remap reordering to an index buffer
 
     HRESULT __cdecl FinalizeVB(
         _In_reads_bytes_(nVerts*stride) const void* vbin, _In_ size_t stride, _In_ size_t nVerts,
         _In_reads_opt_(nDupVerts) const uint32_t* dupVerts, _In_ size_t nDupVerts,
         _In_reads_opt_(nVerts + nDupVerts) const uint32_t* vertexRemap,
-        _Out_writes_bytes_((nVerts + nDupVerts)*stride) void* vbout);
+        _Out_writes_bytes_((nVerts + nDupVerts)*stride) void* vbout) noexcept;
     HRESULT __cdecl FinalizeVB(
         _Inout_updates_bytes_all_(nVerts*stride) void* vb, _In_ size_t stride, _In_ size_t nVerts,
-        _In_reads_(nVerts) const uint32_t* vertexRemap);
+        _In_reads_(nVerts) const uint32_t* vertexRemap) noexcept;
         // Applies a vertex remap and/or a vertex duplication set to a vertex buffer
 
     HRESULT __cdecl FinalizeVBAndPointReps(
@@ -506,18 +505,18 @@ namespace DirectX
         _In_reads_opt_(nDupVerts) const uint32_t* dupVerts, _In_ size_t nDupVerts,
         _In_reads_opt_(nVerts + nDupVerts) const uint32_t* vertexRemap,
         _Out_writes_bytes_((nVerts + nDupVerts)*stride) void* vbout,
-        _Out_writes_(nVerts + nDupVerts) uint32_t* prout);
+        _Out_writes_(nVerts + nDupVerts) uint32_t* prout) noexcept;
     HRESULT __cdecl FinalizeVBAndPointReps(
         _Inout_updates_bytes_all_(nVerts*stride) void* vb, _In_ size_t stride, _In_ size_t nVerts,
         _Inout_updates_all_(nVerts) uint32_t* pointRep,
-        _In_reads_(nVerts) const uint32_t* vertexRemap);
+        _In_reads_(nVerts) const uint32_t* vertexRemap) noexcept;
         // Applies a vertex remap and/or a vertex duplication set to a vertex buffer and point representatives
 
     HRESULT __cdecl CompactVB(
         _In_reads_bytes_(nVerts*stride) const void* vbin, _In_ size_t stride, _In_ size_t nVerts,
         _In_ size_t trailingUnused,
         _In_reads_opt_(nVerts) const uint32_t* vertexRemap,
-        _Out_writes_bytes_((nVerts - trailingUnused)*stride) void* vbout);
+        _Out_writes_bytes_((nVerts - trailingUnused)*stride) void* vbout) noexcept;
         // Applies a vertex remap which contains a known number of unused entries at the end
 
 #include "DirectXMesh.inl"

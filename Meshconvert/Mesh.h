@@ -9,7 +9,7 @@
 // http://go.microsoft.com/fwlink/?LinkID=324981
 //--------------------------------------------------------------------------------------
 
-#include <windows.h>
+#include <Windows.h>
 
 #include <memory>
 #include <string>
@@ -19,14 +19,13 @@
 
 #if defined(_XBOX_ONE) && defined(_TITLE)
 #include <d3d11_x.h>
-#define DCOMMON_H_INCLUDED
 #else
 #include <d3d11_1.h>
 #endif
 
-#include <directxmath.h>
+#include <DirectXMath.h>
 
-#include "directxmesh.h"
+#include "DirectXMesh.h"
 
 class Mesh
 {
@@ -95,11 +94,48 @@ public:
         DirectX::XMFLOAT3   specularColor;
         DirectX::XMFLOAT3   emissiveColor;
         std::wstring        texture;
+        std::wstring        normalTexture;
+        std::wstring        specularTexture;
+        std::wstring        emissiveTexture;
+        std::wstring        rmaTexture;
+
+        Material() noexcept :
+            perVertexColor(false),
+            specularPower(1.f),
+            alpha(1.f),
+            ambientColor{},
+            diffuseColor{},
+            specularColor{},
+            emissiveColor{}
+        {
+        }
+
+        Material(
+            const wchar_t* iname,
+            bool pvc,
+            float power,
+            float ialpha,
+            const DirectX::XMFLOAT3& ambient,
+            const DirectX::XMFLOAT3 diffuse,
+            const DirectX::XMFLOAT3& specular,
+            const DirectX::XMFLOAT3& emissive,
+            const wchar_t* txtname) :
+            name(iname),
+            perVertexColor(pvc),
+            specularPower(power),
+            alpha(ialpha),
+            ambientColor(ambient),
+            diffuseColor(diffuse),
+            specularColor(specular),
+            emissiveColor(emissive),
+            texture(txtname)
+        {
+        }
     };
 
     HRESULT ExportToVBO(_In_z_ const wchar_t* szFileName) const;
     HRESULT ExportToCMO(_In_z_ const wchar_t* szFileName, _In_ size_t nMaterials, _In_reads_opt_(nMaterials) const Material* materials) const;
-    HRESULT ExportToSDKMESH(_In_z_ const wchar_t* szFileName, _In_ size_t nMaterials, _In_reads_opt_(nMaterials) const Material* materials) const;
+    HRESULT ExportToSDKMESH(_In_z_ const wchar_t* szFileName, _In_ size_t nMaterials, _In_reads_opt_(nMaterials) const Material* materials, bool force32bit = false, bool version2 = false) const;
 
     // Create mesh from file
     static HRESULT CreateFromVBO(_In_z_ const wchar_t* szFileName, _Inout_ std::unique_ptr<Mesh>& result);

@@ -15,7 +15,6 @@
 #define NOMINMAX
 #define NODRAWTEXT
 #define NOGDI
-#define NOBITMAP
 #define NOMCX
 #define NOSERVICE
 #define NOHELP
@@ -30,7 +29,6 @@
 #include <list>
 
 #include "Mesh.h"
-#include "WaveFrontReader.h"
 
 using namespace DirectX;
 
@@ -49,9 +47,11 @@ enum OPTIONS
     OPT_GEOMETRIC_ADJ,
     OPT_OUTPUTFILE,
     OPT_SDKMESH,
+    OPT_SDKMESH_V2,
     OPT_CMO,
     OPT_VBO,
     OPT_CLOCKWISE,
+    OPT_FORCE_32BIT_IB,
     OPT_OVERWRITE,
     OPT_NODDS,
     OPT_FLIP,
@@ -95,9 +95,11 @@ const SValue g_pOptions[] =
     { L"ga",        OPT_GEOMETRIC_ADJ },
     { L"o",         OPT_OUTPUTFILE },
     { L"sdkmesh",   OPT_SDKMESH },
+    { L"sdkmesh2",  OPT_SDKMESH_V2 },
     { L"cmo",       OPT_CMO },
     { L"vbo",       OPT_VBO },
     { L"cw",        OPT_CLOCKWISE },
+    { L"ib32",      OPT_FORCE_32BIT_IB },
     { L"y",         OPT_OVERWRITE },
     { L"nodds",     OPT_NODDS },
     { L"flip",      OPT_FLIP },
@@ -115,13 +117,15 @@ const SValue g_pOptions[] =
 
 namespace
 {
-    inline HANDLE safe_handle(HANDLE h) { return (h == INVALID_HANDLE_VALUE) ? 0 : h; }
+    inline HANDLE safe_handle(HANDLE h) { return (h == INVALID_HANDLE_VALUE) ? nullptr : h; }
 
     struct find_closer { void operator()(HANDLE h) { assert(h != INVALID_HANDLE_VALUE); if (h) FindClose(h); } };
 
-    typedef public std::unique_ptr<void, find_closer> ScopedFindHandle;
+    using ScopedFindHandle = std::unique_ptr<void, find_closer>;
 
+#ifdef __PREFAST__
 #pragma prefast(disable : 26018, "Only used with static internal arrays")
+#endif
 
     DWORD LookupByName(const wchar_t *pName, const SValue *pArray)
     {
@@ -137,24 +141,10 @@ namespace
     }
 
 
-    const wchar_t* LookupByValue(DWORD pValue, const SValue *pArray)
-    {
-        while (pArray->pName)
-        {
-            if (pValue == pArray->dwValue)
-                return pArray->pName;
-
-            pArray++;
-        }
-
-        return L"";
-    }
-
-
     void SearchForFiles(const wchar_t* path, std::list<SConversion>& files, bool recursive)
     {
         // Process files
-        WIN32_FIND_DATA findData = {};
+        WIN32_FIND_DATAW findData = {};
         ScopedFindHandle hFile(safe_handle(FindFirstFileExW(path,
             FindExInfoBasic, &findData,
             FindExSearchNameMatch, nullptr,
@@ -174,7 +164,7 @@ namespace
                     files.push_back(conv);
                 }
 
-                if (!FindNextFile(hFile.get(), &findData))
+                if (!FindNextFileW(hFile.get(), &findData))
                     break;
             }
         }
@@ -219,7 +209,7 @@ namespace
                     }
                 }
 
-                if (!FindNextFile(hFile.get(), &findData))
+                if (!FindNextFileW(hFile.get(), &findData))
                     break;
             }
         }
@@ -243,15 +233,21 @@ namespace
 
         wprintf(L"Usage: meshconvert <options> <files>\n");
         wprintf(L"\n");
+        wprintf(L"   Input file type must be Wavefront OBJ\n\n");
+        wprintf(L"   Output file type:\n");
+        wprintf(L"       -sdkmesh        DirectX SDK .sdkmesh format (default)\n");
+        wprintf(L"       -sdkmesh2       .sdkmesh format version 2 (PBR materials)\n");
+        wprintf(L"       -cmo            Visual Studio Content Pipeline .cmo format\n");
+        wprintf(L"       -vbo            Vertex Buffer Object (.vbo) format\n\n");
         wprintf(L"   -r                  wildcard filename search is recursive\n");
         wprintf(L"   -n | -na | -ne      generate normals weighted by angle/area/equal\n");
         wprintf(L"   -t                  generate tangents\n");
         wprintf(L"   -tb                 generate tangents & bi-tangents\n");
         wprintf(L"   -cw                 faces are clockwise (defaults to counter-clockwise)\n");
+        wprintf(L"   -ib32               use 32-bit index buffer (SDKMESH only)\n");
         wprintf(L"   -op | -oplru        vertex cache optimize the mesh (implies -c)\n");
         wprintf(L"   -c                  mesh cleaning including vertex dups for atttribute sets\n");
         wprintf(L"   -ta | -ga           generate topological vs. geometric adjancecy (def: ta)\n");
-        wprintf(L"   -sdkmesh|-cmo|-vbo  output file type\n");
         wprintf(L"   -nodds              prevents extension renaming in exported materials\n");
         wprintf(L"   -flip               reverse winding of faces\n");
         wprintf(L"   -flipu              inverts the u texcoords\n");
@@ -264,118 +260,16 @@ namespace
 
         wprintf(L"\n");
     }
-
-
-    //--------------------------------------------------------------------------------------
-    HRESULT LoadFromOBJ(const wchar_t* szFilename, std::unique_ptr<Mesh>& inMesh, std::vector<Mesh::Material>& inMaterial, DWORD options)
-    {
-        WaveFrontReader<uint32_t> wfReader;
-        HRESULT hr = wfReader.Load(szFilename, (options & (1 << OPT_CLOCKWISE)) ? false : true);
-        if (FAILED(hr))
-            return hr;
-
-        inMesh.reset(new (std::nothrow) Mesh);
-        if (!inMesh)
-            return E_OUTOFMEMORY;
-
-        if (wfReader.indices.empty() || wfReader.vertices.empty())
-            return E_FAIL;
-
-        hr = inMesh->SetIndexData(wfReader.indices.size() / 3, wfReader.indices.data(),
-            wfReader.attributes.empty() ? nullptr : wfReader.attributes.data());
-        if (FAILED(hr))
-            return hr;
-
-        static const D3D11_INPUT_ELEMENT_DESC s_vboLayout[] =
-        {
-            { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0 },
-            { "NORMAL", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 12, D3D11_INPUT_PER_VERTEX_DATA, 0 },
-            { "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 24, D3D11_INPUT_PER_VERTEX_DATA, 0 },
-        };
-
-        static const D3D11_INPUT_ELEMENT_DESC s_vboLayoutAlt[] =
-        {
-            { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0 },
-            { "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 24, D3D11_INPUT_PER_VERTEX_DATA, 0 },
-        };
-
-        const D3D11_INPUT_ELEMENT_DESC* layout = s_vboLayout;
-        size_t nDecl = _countof(s_vboLayout);
-
-        if (!wfReader.hasNormals && !wfReader.hasTexcoords)
-        {
-            nDecl = 1;
-        }
-        else if (wfReader.hasNormals && !wfReader.hasTexcoords)
-        {
-            nDecl = 2;
-        }
-        else if (!wfReader.hasNormals && wfReader.hasTexcoords)
-        {
-            layout = s_vboLayoutAlt;
-            nDecl = _countof(s_vboLayoutAlt);
-        }
-
-        VBReader vbr;
-        hr = vbr.Initialize(layout, nDecl);
-        if (FAILED(hr))
-            return hr;
-
-        hr = vbr.AddStream(wfReader.vertices.data(), wfReader.vertices.size(), 0, sizeof(WaveFrontReader<uint32_t>::Vertex));
-        if (FAILED(hr))
-            return hr;
-
-        hr = inMesh->SetVertexData(vbr, wfReader.vertices.size());
-        if (FAILED(hr))
-            return hr;
-
-        if (!wfReader.materials.empty())
-        {
-            inMaterial.clear();
-            inMaterial.reserve(wfReader.materials.size());
-
-            for (auto it = wfReader.materials.cbegin(); it != wfReader.materials.cend(); ++it)
-            {
-                Mesh::Material mtl = {};
-
-                mtl.name = it->strName;
-                mtl.specularPower = (it->bSpecular) ? float(it->nShininess) : 1.f;
-                mtl.alpha = it->fAlpha;
-                mtl.ambientColor = it->vAmbient;
-                mtl.diffuseColor = it->vDiffuse;
-                mtl.specularColor = (it->bSpecular) ? it->vSpecular : XMFLOAT3(0.f, 0.f, 0.f);
-                mtl.emissiveColor = XMFLOAT3(0.f, 0.f, 0.f);
-
-                wchar_t texture[_MAX_PATH] = {};
-                if (*it->strTexture)
-                {
-                    wchar_t txext[_MAX_EXT];
-                    wchar_t txfname[_MAX_FNAME];
-                    _wsplitpath_s(it->strTexture, nullptr, 0, nullptr, 0, txfname, _MAX_FNAME, txext, _MAX_EXT);
-
-                    if (!(options & (1 << OPT_NODDS)))
-                    {
-                        wcscpy_s(txext, L".dds");
-                    }
-
-                    _wmakepath_s(texture, nullptr, nullptr, txfname, txext);
-                }
-
-                mtl.texture = texture;
-
-                inMaterial.push_back(mtl);
-            }
-        }
-
-        return S_OK;
-    }
 }
 
+extern HRESULT LoadFromOBJ(const wchar_t* szFilename, std::unique_ptr<Mesh>& inMesh, std::vector<Mesh::Material>& inMaterial, bool ccw, bool dds);
 
 //--------------------------------------------------------------------------------------
 // Entry-point
 //--------------------------------------------------------------------------------------
+#ifdef __PREFAST__
 #pragma prefast(disable : 28198, "Command-line tool, frees all memory on exit")
+#endif
 
 int __cdecl wmain(_In_ int argc, _In_z_count_(argc) wchar_t* argv[])
 {
@@ -476,10 +370,15 @@ int __cdecl wmain(_In_ int argc, _In_z_count_(argc) wchar_t* argv[])
                 break;
 
             case OPT_SDKMESH:
+            case OPT_SDKMESH_V2:
                 if (dwOptions & ((1 << OPT_VBO) | (1 << OPT_CMO)))
                 {
                     wprintf(L"Can only use one of sdkmesh, cmo, or vbo\n");
                     return 1;
+                }
+                if (dwOption == OPT_SDKMESH_V2)
+                {
+                    dwOptions |= (1 << OPT_SDKMESH);
                 }
                 break;
 
@@ -500,46 +399,46 @@ int __cdecl wmain(_In_ int argc, _In_z_count_(argc) wchar_t* argv[])
                 break;
 
             case OPT_FILELIST:
+            {
+                std::wifstream inFile(pValue);
+                if (!inFile)
                 {
-                    std::wifstream inFile(pValue);
+                    wprintf(L"Error opening -flist file %ls\n", pValue);
+                    return 1;
+                }
+                wchar_t fname[1024] = {};
+                for (;;)
+                {
+                    inFile >> fname;
                     if (!inFile)
+                        break;
+
+                    if (*fname == L'#')
                     {
-                        wprintf(L"Error opening -flist file %ls\n", pValue);
+                        // Comment
+                    }
+                    else if (*fname == L'-')
+                    {
+                        wprintf(L"Command-line arguments not supported in -flist file\n");
                         return 1;
                     }
-                    wchar_t fname[1024] = {};
-                    for (;;)
+                    else if (wcspbrk(fname, L"?*") != nullptr)
                     {
-                        inFile >> fname;
-                        if (!inFile)
-                            break;
-
-                        if (*fname == L'#')
-                        {
-                            // Comment
-                        }
-                        else if (*fname == L'-')
-                        {
-                            wprintf(L"Command-line arguments not supported in -flist file\n");
-                            return 1;
-                        }
-                        else if (wcspbrk(fname, L"?*") != nullptr)
-                        {
-                            wprintf(L"Wildcards not supported in -flist file\n");
-                            return 1;
-                        }
-                        else
-                        {
-                            SConversion conv;
-                            wcscpy_s(conv.szSrc, MAX_PATH, fname);
-                            conversion.push_back(conv);
-                        }
-
-                        inFile.ignore(1000, '\n');
+                        wprintf(L"Wildcards not supported in -flist file\n");
+                        return 1;
                     }
-                    inFile.close();
+                    else
+                    {
+                        SConversion conv;
+                        wcscpy_s(conv.szSrc, MAX_PATH, fname);
+                        conversion.push_back(conv);
+                    }
+
+                    inFile.ignore(1000, '\n');
                 }
-                break;
+                inFile.close();
+            }
+            break;
             }
         }
         else if (wcspbrk(pArg, L"?*") != nullptr)
@@ -618,11 +517,13 @@ int __cdecl wmain(_In_ int argc, _In_z_count_(argc) wchar_t* argv[])
         }
         else
         {
-            hr = LoadFromOBJ(pConv->szSrc, inMesh, inMaterial, dwOptions);
+            hr = LoadFromOBJ(pConv->szSrc, inMesh, inMaterial,
+                (dwOptions & (1 << OPT_CLOCKWISE)) ? false : true,
+                (dwOptions & (1 << OPT_NODDS)) ? false : true);
         }
         if (FAILED(hr))
         {
-            wprintf(L" FAILED (%08X)\n", hr);
+            wprintf(L" FAILED (%08X)\n", static_cast<unsigned int>(hr));
             return 1;
         }
 
@@ -635,8 +536,8 @@ int __cdecl wmain(_In_ int argc, _In_z_count_(argc) wchar_t* argv[])
             return 1;
         }
 
-        assert(inMesh->GetPositionBuffer() != 0);
-        assert(inMesh->GetIndexBuffer() != 0);
+        assert(inMesh->GetPositionBuffer() != nullptr);
+        assert(inMesh->GetIndexBuffer() != nullptr);
 
         wprintf(L"\n%zu vertices, %zu faces", nVerts, nFaces);
 
@@ -645,7 +546,7 @@ int __cdecl wmain(_In_ int argc, _In_z_count_(argc) wchar_t* argv[])
             hr = inMesh->InvertUTexCoord();
             if (FAILED(hr))
             {
-                wprintf(L"\nERROR: Failed inverting u texcoord (%08X)\n", hr);
+                wprintf(L"\nERROR: Failed inverting u texcoord (%08X)\n", static_cast<unsigned int>(hr));
                 return 1;
             }
         }
@@ -655,7 +556,7 @@ int __cdecl wmain(_In_ int argc, _In_z_count_(argc) wchar_t* argv[])
             hr = inMesh->InvertVTexCoord();
             if (FAILED(hr))
             {
-                wprintf(L"\nERROR: Failed inverting v texcoord (%08X)\n", hr);
+                wprintf(L"\nERROR: Failed inverting v texcoord (%08X)\n", static_cast<unsigned int>(hr));
                 return 1;
             }
         }
@@ -665,7 +566,7 @@ int __cdecl wmain(_In_ int argc, _In_z_count_(argc) wchar_t* argv[])
             hr = inMesh->ReverseHandedness();
             if (FAILED(hr))
             {
-                wprintf(L"\nERROR: Failed reversing handedness (%08X)\n", hr);
+                wprintf(L"\nERROR: Failed reversing handedness (%08X)\n", static_cast<unsigned int>(hr));
                 return 1;
             }
         }
@@ -679,7 +580,7 @@ int __cdecl wmain(_In_ int argc, _In_z_count_(argc) wchar_t* argv[])
             hr = inMesh->GenerateAdjacency(epsilon);
             if (FAILED(hr))
             {
-                wprintf(L"\nERROR: Failed generating adjacency (%08X)\n", hr);
+                wprintf(L"\nERROR: Failed generating adjacency (%08X)\n", static_cast<unsigned int>(hr));
                 return 1;
             }
 
@@ -689,14 +590,14 @@ int __cdecl wmain(_In_ int argc, _In_z_count_(argc) wchar_t* argv[])
             if (!msgs.empty())
             {
                 wprintf(L"\nWARNING: \n");
-                wprintf(msgs.c_str());
+                wprintf(L"%ls", msgs.c_str());
             }
 
             // Clean (also handles attribute reuse split if needed)
             hr = inMesh->Clean();
             if (FAILED(hr))
             {
-                wprintf(L"\nERROR: Failed mesh clean (%08X)\n", hr);
+                wprintf(L"\nERROR: Failed mesh clean (%08X)\n", static_cast<unsigned int>(hr));
                 return 1;
             }
             else
@@ -743,7 +644,7 @@ int __cdecl wmain(_In_ int argc, _In_z_count_(argc) wchar_t* argv[])
             hr = inMesh->ComputeNormals(flags);
             if (FAILED(hr))
             {
-                wprintf(L"\nERROR: Failed computing normals (flags:%1X, %08X)\n", flags, hr);
+                wprintf(L"\nERROR: Failed computing normals (flags:%lX, %08X)\n", flags, static_cast<unsigned int>(hr));
                 return 1;
             }
         }
@@ -760,7 +661,7 @@ int __cdecl wmain(_In_ int argc, _In_z_count_(argc) wchar_t* argv[])
             hr = inMesh->ComputeTangentFrame((dwOptions & (1 << OPT_CTF)) ? true : false);
             if (FAILED(hr))
             {
-                wprintf(L"\nERROR: Failed computing tangent frame (%08X)\n", hr);
+                wprintf(L"\nERROR: Failed computing tangent frame (%08X)\n", static_cast<unsigned int>(hr));
                 return 1;
             }
         }
@@ -768,7 +669,7 @@ int __cdecl wmain(_In_ int argc, _In_z_count_(argc) wchar_t* argv[])
         // Perform attribute and vertex-cache optimization
         if (dwOptions & (1 << OPT_OPTIMIZE))
         {
-            assert(inMesh->GetAdjacencyBuffer() != 0);
+            assert(inMesh->GetAdjacencyBuffer() != nullptr);
 
             float acmr, atvr;
             ComputeVertexCacheMissRate(inMesh->GetIndexBuffer(), nFaces, nVerts, OPTFACES_V_DEFAULT, acmr, atvr);
@@ -778,7 +679,7 @@ int __cdecl wmain(_In_ int argc, _In_z_count_(argc) wchar_t* argv[])
             hr = inMesh->Optimize((dwOptions & (1 << OPT_OPTIMIZE_LRU)) ? true : false);
             if (FAILED(hr))
             {
-                wprintf(L"\nERROR: Failed vertex-cache optimization (%08X)\n", hr);
+                wprintf(L"\nERROR: Failed vertex-cache optimization (%08X)\n", static_cast<unsigned int>(hr));
                 return 1;
             }
         }
@@ -788,7 +689,7 @@ int __cdecl wmain(_In_ int argc, _In_z_count_(argc) wchar_t* argv[])
             hr = inMesh->ReverseWinding();
             if (FAILED(hr))
             {
-                wprintf(L"\nERROR: Failed reversing winding (%08X)\n", hr);
+                wprintf(L"\nERROR: Failed reversing winding (%08X)\n", static_cast<unsigned int>(hr));
                 return 1;
             }
         }
@@ -852,7 +753,7 @@ int __cdecl wmain(_In_ int argc, _In_z_count_(argc) wchar_t* argv[])
                 return 1;
             }
 
-            if (!inMesh->Is16BitIndexBuffer())
+            if (!inMesh->Is16BitIndexBuffer() || (dwOptions & (1 << OPT_FORCE_32BIT_IB)))
             {
                 wprintf(L"\nERROR: VBO only supports 16-bit indices\n");
                 return 1;
@@ -862,7 +763,11 @@ int __cdecl wmain(_In_ int argc, _In_z_count_(argc) wchar_t* argv[])
         }
         else if (!_wcsicmp(outputExt, L".sdkmesh"))
         {
-            hr = inMesh->ExportToSDKMESH(outputPath, inMaterial.size(), inMaterial.empty() ? nullptr : inMaterial.data());
+            hr = inMesh->ExportToSDKMESH(
+                outputPath,
+                inMaterial.size(), inMaterial.empty() ? nullptr : inMaterial.data(),
+                (dwOptions & (1 << OPT_FORCE_32BIT_IB)) ? true : false,
+                (dwOptions & (1 << OPT_SDKMESH_V2)) ? true : false);
         }
         else if (!_wcsicmp(outputExt, L".cmo"))
         {
@@ -872,7 +777,7 @@ int __cdecl wmain(_In_ int argc, _In_z_count_(argc) wchar_t* argv[])
                 return 1;
             }
 
-            if (!inMesh->Is16BitIndexBuffer())
+            if (!inMesh->Is16BitIndexBuffer() || (dwOptions & (1 << OPT_FORCE_32BIT_IB)))
             {
                 wprintf(L"\nERROR: Visual Studio CMO only supports 16-bit indices\n");
                 return 1;
@@ -893,7 +798,7 @@ int __cdecl wmain(_In_ int argc, _In_z_count_(argc) wchar_t* argv[])
 
         if (FAILED(hr))
         {
-            wprintf(L"\nERROR: Failed write (%08X):-> '%ls'\n", hr, outputPath);
+            wprintf(L"\nERROR: Failed write (%08X):-> '%ls'\n", static_cast<unsigned int>(hr), outputPath);
             return 1;
         }
 

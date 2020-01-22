@@ -24,7 +24,7 @@
 #define NOHELP
 #pragma warning(pop)
 
-#include <windows.h>
+#include <Windows.h>
 
 #include <algorithm>
 #include <fstream>
@@ -34,15 +34,13 @@
 
 #include <stdint.h>
 
-#include <directxmath.h>
-#include <directxcollision.h>
+#include <DirectXMath.h>
+#include <DirectXCollision.h>
 
 template<class index_t>
 class WaveFrontReader
 {
 public:
-    typedef index_t index_t;
-
     struct Vertex
     {
         DirectX::XMFLOAT3 position;
@@ -137,7 +135,7 @@ public:
                 INT iPosition, iTexCoord, iNormal;
                 Vertex vertex;
 
-                DWORD faceIndex[MAX_POLY];
+                uint32_t faceIndex[MAX_POLY];
                 size_t iFace = 0;
                 for (;;)
                 {
@@ -151,7 +149,7 @@ public:
 
                     InFile >> iPosition;
 
-                    UINT vertexIndex = 0;
+                    uint32_t vertexIndex = 0;
                     if (!iPosition)
                     {
                         // 0 is not allowed for index
@@ -160,12 +158,12 @@ public:
                     else if (iPosition < 0)
                     {
                         // Negative values are relative indices
-                        vertexIndex = UINT(positions.size() + iPosition);
+                        vertexIndex = uint32_t(ptrdiff_t(positions.size()) + iPosition);
                     }
                     else
                     {
                         // OBJ format uses 1-based arrays
-                        vertexIndex = iPosition - 1;
+                        vertexIndex = uint32_t(iPosition - 1);
                     }
 
                     if (vertexIndex >= positions.size())
@@ -182,7 +180,7 @@ public:
                             // Optional texture coordinate
                             InFile >> iTexCoord;
 
-                            UINT coordIndex = 0;
+                            uint32_t coordIndex = 0;
                             if (!iTexCoord)
                             {
                                 // 0 is not allowed for index
@@ -191,12 +189,12 @@ public:
                             else if (iTexCoord < 0)
                             {
                                 // Negative values are relative indices
-                                coordIndex = UINT(texCoords.size() + iTexCoord);
+                                coordIndex = uint32_t(ptrdiff_t(texCoords.size()) + iTexCoord);
                             }
                             else
                             {
                                 // OBJ format uses 1-based arrays
-                                coordIndex = iTexCoord - 1;
+                                coordIndex = uint32_t(iTexCoord - 1);
                             }
 
                             if (coordIndex >= texCoords.size())
@@ -212,7 +210,7 @@ public:
                             // Optional vertex normal
                             InFile >> iNormal;
 
-                            UINT normIndex = 0;
+                            uint32_t normIndex = 0;
                             if (!iNormal)
                             {
                                 // 0 is not allowed for index
@@ -221,12 +219,12 @@ public:
                             else if (iNormal < 0)
                             {
                                 // Negative values are relative indices
-                                normIndex = UINT(normals.size() + iNormal);
+                                normIndex = uint32_t(ptrdiff_t(normals.size()) + iNormal);
                             }
                             else
                             {
                                 // OBJ format uses 1-based arrays
-                                normIndex = iNormal - 1;
+                                normIndex = uint32_t(iNormal - 1);
                             }
 
                             if (normIndex >= normals.size())
@@ -240,8 +238,8 @@ public:
                     // list. Store the index in the Indices array. The Vertices and Indices
                     // lists will eventually become the Vertex Buffer and Index Buffer for
                     // the mesh.
-                    DWORD index = AddVertex(vertexIndex, &vertex, vertexCache);
-                    if (index == (DWORD)-1)
+                    uint32_t index = AddVertex(vertexIndex, &vertex, vertexCache);
+                    if (index == uint32_t(-1))
                         return E_OUTOFMEMORY;
 
 #pragma warning( suppress : 4127 )
@@ -288,12 +286,12 @@ public:
                 }
 
                 // Convert polygons to triangles
-                DWORD i0 = faceIndex[0];
-                DWORD i1 = faceIndex[1];
+                uint32_t i0 = faceIndex[0];
+                uint32_t i1 = faceIndex[1];
 
                 for (size_t j = 2; j < iFace; ++j)
                 {
-                    DWORD index = faceIndex[j];
+                    uint32_t index = faceIndex[j];
                     indices.emplace_back(static_cast<index_t>(i0));
                     if (ccw)
                     {
@@ -352,7 +350,7 @@ public:
 #endif
             }
 
-            InFile.ignore(1000, '\n');
+            InFile.ignore(1000, L'\n');
         }
 
         if (positions.empty())
@@ -375,7 +373,6 @@ public:
 
             wchar_t szPath[MAX_PATH] = {};
             _wmakepath_s(szPath, MAX_PATH, drive, dir, fname, ext);
-
             HRESULT hr = LoadMTL(szPath);
             if (FAILED(hr))
                 return hr;
@@ -448,18 +445,37 @@ public:
                 InFile >> r >> g >> b;
                 curMaterial->vSpecular = XMFLOAT3(r, g, b);
             }
-            else if (0 == wcscmp(strCommand.c_str(), L"d") ||
-                0 == wcscmp(strCommand.c_str(), L"Tr"))
+            else if (0 == wcscmp(strCommand.c_str(), L"Ke"))
+            {
+                // Emissive color
+                float r, g, b;
+                InFile >> r >> g >> b;
+                curMaterial->vEmissive = XMFLOAT3(r, g, b);
+                if (r > 0.f || g > 0.f || b > 0.f)
+                {
+                    curMaterial->bEmissive = true;
+                }
+            }
+            else if (0 == wcscmp(strCommand.c_str(), L"d"))
             {
                 // Alpha
-                InFile >> curMaterial->fAlpha;
+                float alpha;
+                InFile >> alpha;
+                curMaterial->fAlpha = std::min(1.f, std::max(0.f, alpha));
+            }
+            else if (0 == wcscmp(strCommand.c_str(), L"Tr"))
+            {
+                // Transparency (inverse of alpha)
+                float invAlpha;
+                InFile >> invAlpha;
+                curMaterial->fAlpha = std::min(1.f, std::max(0.f, 1.f - invAlpha));
             }
             else if (0 == wcscmp(strCommand.c_str(), L"Ns"))
             {
                 // Shininess
                 int nShininess;
                 InFile >> nShininess;
-                curMaterial->nShininess = nShininess;
+                curMaterial->nShininess = uint32_t(nShininess);
             }
             else if (0 == wcscmp(strCommand.c_str(), L"illum"))
             {
@@ -470,8 +486,32 @@ public:
             }
             else if (0 == wcscmp(strCommand.c_str(), L"map_Kd"))
             {
-                // Texture
-                InFile >> curMaterial->strTexture;
+                // Diffuse texture
+                LoadTexturePath(InFile, curMaterial->strTexture, MAX_PATH);
+            }
+            else if (0 == wcscmp(strCommand.c_str(), L"map_Ks"))
+            {
+                // Specular texture
+                LoadTexturePath(InFile, curMaterial->strSpecularTexture, MAX_PATH);
+            }
+            else if (0 == wcscmp(strCommand.c_str(), L"map_Kn")
+                     || 0 == wcscmp(strCommand.c_str(), L"norm"))
+            {
+                // Normal texture
+                LoadTexturePath(InFile, curMaterial->strNormalTexture, MAX_PATH);
+            }
+            else if (0 == wcscmp(strCommand.c_str(), L"map_Ke")
+                     || 0 == wcscmp(strCommand.c_str(), L"map_emissive"))
+            {
+                // Emissive texture
+                LoadTexturePath(InFile, curMaterial->strEmissiveTexture, MAX_PATH);
+                curMaterial->bEmissive = true;
+            }
+            else if (0 == wcscmp(strCommand.c_str(), L"map_RMA")
+                || 0 == wcscmp(strCommand.c_str(), L"map_ORM"))
+            {
+                // RMA texture
+                LoadTexturePath(InFile, curMaterial->strRMATexture, MAX_PATH);
             }
             else
             {
@@ -502,6 +542,8 @@ public:
 
     HRESULT LoadVBO(_In_z_ const wchar_t* szFileName)
     {
+        using namespace DirectX;
+
         Clear();
 
         wchar_t fname[_MAX_FNAME] = {};
@@ -564,23 +606,35 @@ public:
         DirectX::XMFLOAT3 vAmbient;
         DirectX::XMFLOAT3 vDiffuse;
         DirectX::XMFLOAT3 vSpecular;
+        DirectX::XMFLOAT3 vEmissive;
         uint32_t nShininess;
         float fAlpha;
 
         bool bSpecular;
+        bool bEmissive;
 
         wchar_t strName[MAX_PATH];
         wchar_t strTexture[MAX_PATH];
+        wchar_t strNormalTexture[MAX_PATH];
+        wchar_t strSpecularTexture[MAX_PATH];
+        wchar_t strEmissiveTexture[MAX_PATH];
+        wchar_t strRMATexture[MAX_PATH];
 
         Material() noexcept :
         vAmbient(0.2f, 0.2f, 0.2f),
             vDiffuse(0.8f, 0.8f, 0.8f),
             vSpecular(1.0f, 1.0f, 1.0f),
+            vEmissive(0.f, 0.f, 0.f),
             nShininess(0),
             fAlpha(1.f),
             bSpecular(false),
+            bEmissive(false),
             strName{},
-            strTexture{}
+            strTexture{},
+            strNormalTexture{},
+            strSpecularTexture{},
+            strEmissiveTexture{},
+            strRMATexture{}
         {
         }
     };
@@ -597,9 +651,9 @@ public:
     DirectX::BoundingBox    bounds;
 
 private:
-    typedef std::unordered_multimap<UINT, UINT> VertexCache;
+    using VertexCache = std::unordered_multimap<uint32_t, uint32_t>;
 
-    DWORD AddVertex(UINT hash, Vertex* pVertex, VertexCache& cache)
+    uint32_t AddVertex(uint32_t hash, const Vertex* pVertex, VertexCache& cache)
     {
         auto f = cache.equal_range(hash);
 
@@ -613,11 +667,46 @@ private:
             }
         }
 
-        DWORD index = static_cast<UINT>(vertices.size());
+        auto index = static_cast<uint32_t>(vertices.size());
         vertices.emplace_back(*pVertex);
 
         VertexCache::value_type entry(hash, index);
         cache.insert(entry);
         return index;
+    }
+
+    void LoadTexturePath(std::wifstream& InFile, _Out_writes_(maxChar) wchar_t* texture, size_t maxChar)
+    {
+        wchar_t buff[1024] = {};
+        InFile.getline(buff, 1024, L'\n');
+        InFile.putback(L'\n');
+
+        std::wstring path = buff;
+
+        // Ignore any end-of-line comment
+        size_t pos = path.find_first_of(L'#');
+        if (pos != std::wstring::npos)
+        {
+            path = path.substr(0, pos);
+        }
+
+        // Trim any trailing whitespace
+        pos = path.find_last_not_of(L" \t");
+        if (pos != std::wstring::npos)
+        {
+            path = path.substr(0, pos + 1);
+        }
+
+        // Texture path should be last element in line
+        pos = path.find_last_of(' ');
+        if (pos != std::wstring::npos)
+        {
+            path = path.substr(pos + 1);
+        }
+
+        if (!path.empty())
+        {
+            wcscpy_s(texture, maxChar, path.c_str());
+        }
     }
 };

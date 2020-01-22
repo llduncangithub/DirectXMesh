@@ -37,7 +37,7 @@ namespace
     // <algorithm> std::make_heap doesn't match D3DX10 so we use the same algorithm here
     void MakeXHeap(
         _Out_writes_(nVerts) uint32_t *index,
-        _In_reads_(nVerts) const XMFLOAT3* positions, size_t nVerts)
+        _In_reads_(nVerts) const XMFLOAT3* positions, size_t nVerts) noexcept
     {
         for (uint32_t vert = 0; vert < nVerts; ++vert)
         {
@@ -49,7 +49,7 @@ namespace
             // Create the heap
             uint32_t iulLim = uint32_t(nVerts);
 
-            for (uint32_t vert = uint32_t(nVerts >> 1); --vert != -1; )
+            for (uint32_t vert = uint32_t(nVerts >> 1); --vert != uint32_t(-1); )
             {
                 // Percolate down
                 uint32_t iulI = vert;
@@ -82,7 +82,7 @@ namespace
             }
 
             // Sort the heap
-            while (--iulLim != -1)
+            while (--iulLim != uint32_t(-1))
             {
                 uint32_t ulT = index[iulLim];
                 index[iulLim] = index[0];
@@ -173,13 +173,14 @@ namespace
 
             for (size_t vert = 0; vert < nVerts; ++vert)
             {
-                uint32_t hashKey = (*reinterpret_cast<const uint32_t*>(&positions[vert].x)
-                    + *reinterpret_cast<const uint32_t*>(&positions[vert].y)
-                    + *reinterpret_cast<const uint32_t*>(&positions[vert].z)) % uint32_t(hashSize);
+                auto px = reinterpret_cast<const uint32_t*>(&positions[vert].x);
+                auto py = reinterpret_cast<const uint32_t*>(&positions[vert].y);
+                auto pz = reinterpret_cast<const uint32_t*>(&positions[vert].z);
+                uint32_t hashKey = (*px + *py + *pz) % uint32_t(hashSize);
 
                 uint32_t found = UNUSED32;
 
-                for (auto current = hashTable[hashKey]; current != 0; current = current->next)
+                for (auto current = hashTable[hashKey]; current != nullptr; current = current->next)
                 {
                     if (current->v.x == positions[vert].x
                         && current->v.y == positions[vert].y
@@ -446,7 +447,7 @@ namespace
 
                 uint32_t foundFace = UNUSED32;
 
-                while (current != 0)
+                while (current != nullptr)
                 {
                     if ((current->v2 == vb) && (current->v1 == va))
                     {
@@ -464,13 +465,13 @@ namespace
                 float bestDiff = -2.f;
 
                 // Scan for additional matches
-                if (current != 0)
+                if (current)
                 {
                     prev = current;
                     current = current->next;
 
                     // find 'better' match
-                    while (current != 0)
+                    while (current != nullptr)
                     {
                         if ((current->v2 == vb) && (current->v1 == va))
                         {
@@ -525,10 +526,10 @@ namespace
 
                 if (foundFace != UNUSED32)
                 {
-                    assert(found != 0);
+                    assert(found != nullptr);
 
                     // remove found face from hash table
-                    if (foundPrev != 0)
+                    if (foundPrev != nullptr)
                     {
                         foundPrev->next = found->next;
                     }
@@ -546,12 +547,12 @@ namespace
                     current = hashTable[hashKey2];
                     prev = nullptr;
 
-                    while (current != 0)
+                    while (current != nullptr)
                     {
                         if ((current->face == uint32_t(face)) && (current->v2 == va) && (current->v1 == vb))
                         {
                             // trim edge from hash table
-                            if (prev != 0)
+                            if (prev != nullptr)
                             {
                                 prev->next = current->next;
                             }
@@ -623,10 +624,13 @@ namespace
 //-------------------------------------------------------------------------------------
 _Use_decl_annotations_
 HRESULT DirectX::GenerateAdjacencyAndPointReps(
-    const uint16_t* indices, size_t nFaces,
-    const XMFLOAT3* positions, size_t nVerts,
+    const uint16_t* indices,
+    size_t nFaces,
+    const XMFLOAT3* positions,
+    size_t nVerts,
     float epsilon,
-    uint32_t* pointRep, uint32_t* adjacency)
+    uint32_t* pointRep,
+    uint32_t* adjacency)
 {
     if (!indices || !nFaces || !positions || !nVerts)
         return E_INVALIDARG;
@@ -662,10 +666,13 @@ HRESULT DirectX::GenerateAdjacencyAndPointReps(
 
 _Use_decl_annotations_
 HRESULT DirectX::GenerateAdjacencyAndPointReps(
-    const uint32_t* indices, size_t nFaces,
-    const XMFLOAT3* positions, size_t nVerts,
+    const uint32_t* indices,
+    size_t nFaces,
+    const XMFLOAT3* positions,
+    size_t nVerts,
     float epsilon,
-    uint32_t* pointRep, uint32_t* adjacency)
+    uint32_t* pointRep,
+    uint32_t* adjacency)
 {
     if (!indices || !nFaces || !positions || !nVerts)
         return E_INVALIDARG;
@@ -703,8 +710,10 @@ HRESULT DirectX::GenerateAdjacencyAndPointReps(
 //-------------------------------------------------------------------------------------
 _Use_decl_annotations_
 HRESULT DirectX::ConvertPointRepsToAdjacency(
-    const uint16_t* indices, size_t nFaces,
-    const XMFLOAT3* positions, size_t nVerts,
+    const uint16_t* indices,
+    size_t nFaces,
+    const XMFLOAT3* positions,
+    size_t nVerts,
     const uint32_t* pointRep,
     uint32_t* adjacency)
 {
@@ -737,8 +746,10 @@ HRESULT DirectX::ConvertPointRepsToAdjacency(
 
 _Use_decl_annotations_
 HRESULT DirectX::ConvertPointRepsToAdjacency(
-    const uint32_t* indices, size_t nFaces,
-    const XMFLOAT3* positions, size_t nVerts,
+    const uint32_t* indices,
+    size_t nFaces,
+    const XMFLOAT3* positions,
+    size_t nVerts,
     const uint32_t* pointRep,
     uint32_t* adjacency)
 {
